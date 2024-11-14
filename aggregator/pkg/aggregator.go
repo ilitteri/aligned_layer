@@ -331,6 +331,56 @@ func (agg *Aggregator) sendAggregatedResponse(batchIdentifierHash [32]byte, batc
 	return receipt, nil
 }
 
+func (agg *Aggregator) AddNewTaskUnprotected(batchMerkleRoot [32]byte, senderAddress [20]byte, taskCreatedBlock uint32) {
+	agg.telemetry.InitNewTrace(batchMerkleRoot)
+	batchIdentifier := append(batchMerkleRoot[:], senderAddress[:]...)
+	var batchIdentifierHash = *(*[32]byte)(crypto.Keccak256(batchIdentifier))
+
+	agg.AggregatorConfig.BaseConfig.Logger.Info("Adding new task",
+		"Batch merkle root", "0x"+hex.EncodeToString(batchMerkleRoot[:]),
+		"Sender Address", "0x"+hex.EncodeToString(senderAddress[:]),
+		"batchIdentifierHash", "0x"+hex.EncodeToString(batchIdentifierHash[:]))
+
+	// --- UPDATE BATCH - INDEX CACHES ---
+	batchIndex := agg.nextBatchIndex
+	if _, ok := agg.batchesIdxByIdentifierHash[batchIdentifierHash]; ok {
+		agg.logger.Warn("Batch already exists", "batchIndex", batchIndex, "batchIdentifierHash", batchIdentifierHash)
+		return
+	}
+
+	// This shouldn't happen, since both maps are updated together
+	if _, ok := agg.batchesIdentifierHashByIdx[batchIndex]; ok {
+		agg.logger.Warn("Batch already exists", "batchIndex", batchIndex, "batchIdentifierHash", batchIdentifierHash)
+		return
+	}
+
+	agg.batchesIdxByIdentifierHash[batchIdentifierHash] = batchIndex
+	agg.batchCreatedBlockByIdx[batchIndex] = uint64(taskCreatedBlock)
+	agg.batchesIdentifierHashByIdx[batchIndex] = batchIdentifierHash
+	agg.batchDataByIdentifierHash[batchIdentifierHash] = BatchData{
+		BatchMerkleRoot: batchMerkleRoot,
+		SenderAddress:   senderAddress,
+	}
+	agg.logger.Info(
+		"Task Info added in aggregator:",
+		"Task", batchIndex,
+		"batchIdentifierHash", batchIdentifierHash,
+	)
+	agg.nextBatchIndex += 1
+
+	quorumNums := eigentypes.QuorumNums{eigentypes.QuorumNum(QUORUM_NUMBER)}
+	quorumThresholdPercentages := eigentypes.QuorumThresholdPercentages{eigentypes.QuorumThresholdPercentage(QUORUM_THRESHOLD)}
+
+	err := agg.blsAggregationService.InitializeNewTask(batchIndex, taskCreatedBlock, quorumNums, quorumThresholdPercentages, agg.AggregatorConfig.Aggregator.BlsServiceTaskTimeout)
+	// FIXME(marian): When this errors, should we retry initializing new task? Logging fatal for now.
+	if err != nil {
+		agg.logger.Fatalf("BLS aggregation service error when initializing new task: %s", err)
+	}
+
+	agg.metrics.IncAggregatorReceivedTasks()
+	agg.logger.Info("New task added", "batchIndex", batchIndex, "batchIdentifierHash", "0x"+hex.EncodeToString(batchIdentifierHash[:]))
+}
+
 func (agg *Aggregator) AddNewTask(batchMerkleRoot [32]byte, senderAddress [20]byte, taskCreatedBlock uint32) {
 	agg.telemetry.InitNewTrace(batchMerkleRoot)
 	batchIdentifier := append(batchMerkleRoot[:], senderAddress[:]...)

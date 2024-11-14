@@ -53,7 +53,15 @@ func (agg *Aggregator) ProcessOperatorSignedTaskResponseV2(signedTaskResponse *t
 		"BatchIdentifierHash", "0x"+hex.EncodeToString(signedTaskResponse.BatchIdentifierHash[:]),
 		"operatorId", hex.EncodeToString(signedTaskResponse.OperatorId[:]))
 
+	agg.taskMutex.Lock()
+	agg.AggregatorConfig.BaseConfig.Logger.Info("- Locked Resources: Process operator response")
+
 	taskIndex, err := agg.GetTaskIndex(signedTaskResponse.BatchIdentifierHash)
+
+	defer func() {
+		agg.taskMutex.Unlock()
+		agg.AggregatorConfig.BaseConfig.Logger.Info("- Unlocked Resources: Process operator response")
+	}()
 
 	if err != nil {
 		agg.logger.Warn("Task not found in the internal map, might have been missed. Trying to fetch task data from Ethereum")
@@ -64,7 +72,7 @@ func (agg *Aggregator) ProcessOperatorSignedTaskResponseV2(signedTaskResponse *t
 			return nil
 		}
 		agg.logger.Info("Task was found in Ethereum, adding it to the internal map")
-		agg.AddNewTask(batch.BatchMerkleRoot, batch.SenderAddress, batch.TaskCreatedBlock)
+		agg.AddNewTaskUnprotected(batch.BatchMerkleRoot, batch.SenderAddress, batch.TaskCreatedBlock)
 		taskIndex, err = agg.GetTaskIndex(signedTaskResponse.BatchIdentifierHash)
 		if err != nil {
 			// This shouldn't happen, since we just added the task
@@ -153,11 +161,7 @@ func (agg *Aggregator) ProcessNewSignature(ctx context.Context, taskIndex uint32
 
 func (agg *Aggregator) GetTaskIndex(batchIdentifierHash [32]byte) (uint32, error) {
 	getTaskIndex_func := func() (uint32, error) {
-		agg.taskMutex.Lock()
-		agg.AggregatorConfig.BaseConfig.Logger.Info("- Locked Resources: Get task index")
 		taskIndex, ok := agg.batchesIdxByIdentifierHash[batchIdentifierHash]
-		agg.taskMutex.Unlock()
-		agg.logger.Info("- Unlocked Resources: Get task index")
 		if !ok {
 			return taskIndex, fmt.Errorf("Task not found in the internal map")
 		} else {

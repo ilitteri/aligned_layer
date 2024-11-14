@@ -17,8 +17,8 @@ type AggregatorRpcClient struct {
 }
 
 const (
-	MaxRetries    = 10
-	RetryInterval = 10 * time.Second
+	MaxRetries    = 100000
+	RetryInterval = 50 * time.Millisecond
 )
 
 func NewAggregatorRpcClient(aggregatorIpPortAddr string, logger logging.Logger) (*AggregatorRpcClient, error) {
