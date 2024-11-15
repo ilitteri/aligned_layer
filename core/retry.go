@@ -25,13 +25,13 @@ func (e PermanentError) Is(err error) bool {
 }
 
 const (
-	MinDelay                 = 1 * time.Second  // Initial delay for retry interval.
-	MaxInterval              = 60 * time.Second // Maximum interval an individual retry may have.
-	MaxElapsedTime           = 0 * time.Second  // Maximum time all retries may take. `0` corresponds to no limit on the time of the retries.
-	RetryFactor      float64 = 2                // Multiplier factor computed exponential retry interval is scaled by.
-	NumRetries       uint64  = 3                // Total number of retries attempted.
-	MinDelayChain            = 12 * time.Second // Initial delay for retry interval for contract calls. Corresponds to 1 ethereum block.
-	MaxIntervalChain         = 2 * time.Minute  // Maximum interval for an individual retry.
+	MinDelay                 = 1 * time.Second // Initial delay for retry interval.
+	MaxInterval              = 2 * time.Second // Maximum interval an individual retry may have.
+	MaxElapsedTime           = 0 * time.Second // Maximum time all retries may take. `0` corresponds to no limit on the time of the retries.
+	RetryFactor      float64 = 2               // Multiplier factor computed exponential retry interval is scaled by.
+	NumRetries       uint64  = 0               // Total number of retries attempted.
+	MinDelayChain            = 1 * time.Second // Initial delay for retry interval for contract calls. Corresponds to 1 ethereum block.
+	MaxIntervalChain         = 4 * time.Second // Maximum interval for an individual retry.
 )
 
 /*

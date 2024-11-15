@@ -37,7 +37,7 @@ defmodule Explorer.Periodically do
   # Reads and process last n blocks for new batches or batch changes
   def handle_info(:batches, state) do
     count = Map.get(state, :batches_count)
-    read_block_qty = 8
+    read_block_qty = 300
     latest_block_number = AlignedLayerServiceManager.get_latest_block_number()
     read_from_block = max(0, latest_block_number - read_block_qty)
 

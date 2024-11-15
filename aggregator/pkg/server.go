@@ -141,6 +141,7 @@ func (agg *Aggregator) ProcessNewSignature(ctx context.Context, taskIndex uint32
 			blsSignature, operatorId,
 		)
 		if err != nil {
+			agg.logger.Warnf("DEBUG: Error while ProcessNewSignature of task %v, error: %v, time: %v", taskIndex, err, time.Now().Format("15:04:05.999999999"))
 			if strings.Contains(err.Error(), "Failed to verify signature") {
 				err = retry.PermanentError{Inner: err}
 			}
@@ -165,5 +166,5 @@ func (agg *Aggregator) GetTaskIndex(batchIdentifierHash [32]byte) (uint32, error
 		}
 	}
 
-	return retry.RetryWithData(getTaskIndex_func, retry.MinDelay, retry.RetryFactor, retry.NumRetries, retry.MaxInterval, retry.MaxElapsedTime)
+	return retry.RetryWithData(getTaskIndex_func, retry.MinDelay, retry.RetryFactor, 3, retry.MaxInterval, retry.MaxElapsedTime)
 }

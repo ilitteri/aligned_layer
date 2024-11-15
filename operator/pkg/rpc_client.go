@@ -17,7 +17,7 @@ type AggregatorRpcClient struct {
 }
 
 const (
-	MaxRetries    = 10
+	MaxRetries    = 10000
 	RetryInterval = 10 * time.Second
 )
 

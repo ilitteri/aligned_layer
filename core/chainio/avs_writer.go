@@ -76,6 +76,7 @@ func NewAvsWriterFromConfig(baseConfig *config.BaseConfig, ecdsaConfig *config.E
 // it will try again bumping the last tx gas price based on `CalculateGasPriceBump`
 // This process happens indefinitely until the transaction is included.
 func (w *AvsWriter) SendAggregatedResponse(batchIdentifierHash [32]byte, batchMerkleRoot [32]byte, senderAddress [20]byte, nonSignerStakesAndSignature servicemanager.IBLSSignatureCheckerNonSignerStakesAndSignature, gasBumpPercentage uint, gasBumpIncrementalPercentage uint, timeToWaitBeforeBump time.Duration, onGasPriceBumped func(*big.Int)) (*types.Receipt, error) {
+	w.logger.Warnf("DEBUG: Enter SendAggregatedResponse function, MR: 0x%x", batchMerkleRoot)
 	txOpts := *w.Signer.GetTxOpts()
 	txOpts.NoSend = true // simulate the transaction
 	tx, err := w.RespondToTaskV2Retryable(&txOpts, batchMerkleRoot, senderAddress, nonSignerStakesAndSignature)
@@ -83,6 +84,7 @@ func (w *AvsWriter) SendAggregatedResponse(batchIdentifierHash [32]byte, batchMe
 		return nil, err
 	}
 
+	w.logger.Warnf("DEBUG: Call checkRespondToTaskFeeLimit function, MR: 0x%x", batchMerkleRoot)
 	err = w.checkRespondToTaskFeeLimit(tx, txOpts, batchIdentifierHash, senderAddress)
 	if err != nil {
 		return nil, err
@@ -96,36 +98,44 @@ func (w *AvsWriter) SendAggregatedResponse(batchIdentifierHash [32]byte, batchMe
 	i := 0
 
 	respondToTaskV2Func := func() (*types.Receipt, error) {
+		w.logger.Warnf("DEBUG: Call GetGasPriceRetryable function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 		gasPrice, err := utils.GetGasPriceRetryable(w.Client, w.ClientFallback)
 		if err != nil {
 			return nil, err
 		}
 
+		w.logger.Warnf("DEBUG: Call CalculateGasPriceBumpBasedOnRetry function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 		bumpedGasPrice := utils.CalculateGasPriceBumpBasedOnRetry(gasPrice, gasBumpPercentage, gasBumpIncrementalPercentage, i)
 		// new bumped gas price must be higher than the last one (this should hardly ever happen though)
 		if bumpedGasPrice.Cmp(txOpts.GasPrice) > 0 {
 			txOpts.GasPrice = bumpedGasPrice
 		} else {
 			// bump the last tx gas price a little by `gasBumpIncrementalPercentage` to replace it.
+			w.logger.Warnf("DEBUG: Call CalculateGasPriceBumpBasedOnRetry function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 			txOpts.GasPrice = utils.CalculateGasPriceBumpBasedOnRetry(txOpts.GasPrice, gasBumpIncrementalPercentage, 0, 0)
 		}
 
 		if i > 0 {
+			w.logger.Warnf("DEBUG: Call onGasPriceBumped function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 			onGasPriceBumped(txOpts.GasPrice)
 		}
 
+		w.logger.Warnf("DEBUG: Call checkRespondToTaskFeeLimit function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 		err = w.checkRespondToTaskFeeLimit(tx, txOpts, batchIdentifierHash, senderAddress)
 		if err != nil {
+			w.logger.Warnf("DEBUG: An error after checkRespondToTaskFeeLimit call, err: %v, i: %v, MR: 0x%x", err, i, batchMerkleRoot)
 			return nil, retry.PermanentError{Inner: err}
 		}
 
 		w.logger.Infof("Sending RespondToTask transaction with a gas price of %v", txOpts.GasPrice)
 
+		w.logger.Warnf("DEBUG: Call RespondToTaskV2Retryable function, MR: 0x%x", batchMerkleRoot)
 		tx, err = w.RespondToTaskV2Retryable(&txOpts, batchMerkleRoot, senderAddress, nonSignerStakesAndSignature)
 		if err != nil {
 			return nil, err
 		}
 
+		w.logger.Warnf("DEBUG: Call WaitForTransactionReceiptRetryable function, i: %v, MR: 0x%x", i, batchMerkleRoot)
 		receipt, err := utils.WaitForTransactionReceiptRetryable(w.Client, w.ClientFallback, tx.Hash(), timeToWaitBeforeBump)
 		if receipt != nil {
 			return receipt, nil
@@ -139,6 +149,8 @@ func (w *AvsWriter) SendAggregatedResponse(batchIdentifierHash [32]byte, batchMe
 		if err != nil {
 			return nil, err
 		}
+
+		w.logger.Warnf("DEBUG: End of retryable function on SendAggregatedResponse, i: %v, MR: 0x%x", i, batchMerkleRoot)
 		return nil, fmt.Errorf("transaction failed")
 	}
 
