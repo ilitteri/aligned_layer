@@ -29,7 +29,7 @@ const (
 	MaxInterval              = 2 * time.Second // Maximum interval an individual retry may have.
 	MaxElapsedTime           = 0 * time.Second // Maximum time all retries may take. `0` corresponds to no limit on the time of the retries.
 	RetryFactor      float64 = 2               // Multiplier factor computed exponential retry interval is scaled by.
-	NumRetries       uint64  = 0               // Total number of retries attempted.
+	NumRetries       uint64  = 100             // Total number of retries attempted.
 	MinDelayChain            = 1 * time.Second // Initial delay for retry interval for contract calls. Corresponds to 1 ethereum block.
 	MaxIntervalChain         = 4 * time.Second // Maximum interval for an individual retry.
 )
@@ -103,7 +103,9 @@ func RetryWithData[T any](functionToRetry func() (T, error), minDelay time.Durat
 				if r := recover(); r != nil {
 					if panic_err, ok := r.(error); ok {
 						err = panic_err
+						fmt.Printf("PANIC HAPPENED: Retry with data function %v", panic_err)
 					} else {
+						fmt.Printf("PANIC HAPPENED: Retry with data function, else case")
 						err = fmt.Errorf("panicked: %v", panic_err)
 					}
 				}
@@ -150,8 +152,10 @@ func Retry(functionToRetry func() error, minDelay time.Duration, factor float64,
 				if r := recover(); r != nil {
 					if panic_err, ok := r.(error); ok {
 						err = panic_err
+						fmt.Printf("PANIC HAPPENED: Retry with data function %v", panic_err)
 					} else {
 						err = fmt.Errorf("panicked: %v", panic_err)
+						fmt.Printf("PANIC HAPPENED: Retry with data function, else case")
 					}
 				}
 			}()

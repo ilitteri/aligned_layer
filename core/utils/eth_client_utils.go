@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"time"
 
+	"fmt" // TODO: Delete this
 	"github.com/Layr-Labs/eigensdk-go/chainio/clients/eth"
 	eigentypes "github.com/Layr-Labs/eigensdk-go/types"
 	gethcommon "github.com/ethereum/go-ethereum/common"
@@ -79,8 +80,10 @@ func GetGasPriceRetryable(client eth.InstrumentedClient, fallbackClient eth.Inst
 	respondToTaskV2_func := func() (*big.Int, error) {
 		gasPrice, err := client.SuggestGasPrice(context.Background())
 		if err != nil {
+			fmt.Printf("DEBUG: Error on GetGasPriceRetryable: %v", err)
 			gasPrice, err = fallbackClient.SuggestGasPrice(context.Background())
 			if err != nil {
+				fmt.Printf("DEBUG: Error on GetGasPriceRetryable fallback: %v", err)
 				return nil, err
 			}
 		}

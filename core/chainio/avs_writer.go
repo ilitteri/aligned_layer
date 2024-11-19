@@ -163,6 +163,8 @@ func (w *AvsWriter) checkRespondToTaskFeeLimit(tx *types.Transaction, txOpts bin
 	w.logger.Info("Simulated cost", "cost", simulatedCost)
 
 	// Get RespondToTaskFeeLimit
+
+	w.logger.Warnf("DEBUG: Call BatchesStateRetryable inside checkRespondToTaskFeeLimit function, batchHash: 0x%x", batchIdentifierHash)
 	batchState, err := w.BatchesStateRetryable(&bind.CallOpts{}, batchIdentifierHash)
 	if err != nil {
 		// Fallback also failed
@@ -177,24 +179,28 @@ func (w *AvsWriter) checkRespondToTaskFeeLimit(tx *types.Transaction, txOpts bin
 	w.logger.Info("Batch RespondToTaskFeeLimit", "RespondToTaskFeeLimit", respondToTaskFeeLimit)
 
 	if respondToTaskFeeLimit.Cmp(simulatedCost) < 0 {
+		w.logger.Warnf("DEBUG: A comparisson error happened inside checkRespondToTaskFeeLimit function, batchHash: 0x%x", batchIdentifierHash)
 		return fmt.Errorf("cost of transaction is higher than Batch.RespondToTaskFeeLimit")
 	}
 
+	w.logger.Warnf("DEBUG: Call to compareBalances inside checkRespondToTaskFeeLimit function, batchHash: 0x%x", batchIdentifierHash)
 	return w.compareBalances(respondToTaskFeeLimit, aggregatorAddress, senderAddress)
 }
 
 func (w *AvsWriter) compareBalances(amount *big.Int, aggregatorAddress common.Address, senderAddress [20]byte) error {
 	if err := w.compareAggregatorBalance(amount, aggregatorAddress); err != nil {
+		w.logger.Warnf("DEBUG: Call to compareAggregatorBalance failed")
 		return err
 	}
 	if err := w.compareBatcherBalance(amount, senderAddress); err != nil {
+		w.logger.Warnf("DEBUG: Call to compareBatcherBalance failed")
 		return err
 	}
 	return nil
 }
 
 func (w *AvsWriter) compareAggregatorBalance(amount *big.Int, aggregatorAddress common.Address) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
 	defer cancel()
 
 	aggregatorBalance, err := w.BalanceAtRetryable(ctx, aggregatorAddress, nil)

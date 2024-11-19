@@ -80,6 +80,9 @@ type Aggregator struct {
 	// Mutex to protect ethereum wallet
 	walletMutex *sync.Mutex
 
+	// Operator response mutex DEBUG
+	operatorResponseMutex *sync.Mutex
+
 	logger logging.Logger
 
 	// Metrics
@@ -173,6 +176,7 @@ func NewAggregator(aggregatorConfig config.AggregatorConfig) (*Aggregator, error
 		nextBatchIndex:             nextBatchIndex,
 		taskMutex:                  &sync.Mutex{},
 		walletMutex:                &sync.Mutex{},
+		operatorResponseMutex:      &sync.Mutex{},
 
 		blsAggregationService: blsAggregationService,
 		logger:                logger,
@@ -294,8 +298,12 @@ func (agg *Aggregator) handleBlsAggServiceResponse(blsAggServiceResp blsagg.BlsA
 // / Sends response to contract and waits for transaction receipt
 // / Returns error if it fails to send tx or receipt is not found
 func (agg *Aggregator) sendAggregatedResponse(batchIdentifierHash [32]byte, batchMerkleRoot [32]byte, senderAddress [20]byte, nonSignerStakesAndSignature servicemanager.IBLSSignatureCheckerNonSignerStakesAndSignature) (*gethtypes.Receipt, error) {
-
+	agg.logger.Infof("- Trying to lock Wallet Resources, MR: 0x%v", batchMerkleRoot)
 	agg.walletMutex.Lock()
+	defer func() {
+		agg.walletMutex.Unlock()
+		agg.logger.Infof("- Unlocked Wallet Resources: sendAggregatedResponse, MR: 0x%v", batchMerkleRoot)
+	}()
 	agg.logger.Infof("- Locked Wallet Resources: Sending aggregated response for batch",
 		"merkleRoot", hex.EncodeToString(batchMerkleRoot[:]),
 		"senderAddress", hex.EncodeToString(senderAddress[:]),
@@ -317,13 +325,10 @@ func (agg *Aggregator) sendAggregatedResponse(batchIdentifierHash [32]byte, batc
 		onGasPriceBumped,
 	)
 	if err != nil {
-		agg.walletMutex.Unlock()
-		agg.logger.Infof("- Unlocked Wallet Resources: Error sending aggregated response for batch %s. Error: %s", hex.EncodeToString(batchIdentifierHash[:]), err)
 		agg.telemetry.LogTaskError(batchMerkleRoot, err)
 		return nil, err
 	}
 
-	agg.walletMutex.Unlock()
 	agg.logger.Infof("- Unlocked Wallet Resources: Sending aggregated response for batch %s", hex.EncodeToString(batchIdentifierHash[:]))
 
 	agg.metrics.IncAggregatedResponses()
@@ -378,7 +383,7 @@ func (agg *Aggregator) AddNewTask(batchMerkleRoot [32]byte, senderAddress [20]by
 	quorumNums := eigentypes.QuorumNums{eigentypes.QuorumNum(QUORUM_NUMBER)}
 	quorumThresholdPercentages := eigentypes.QuorumThresholdPercentages{eigentypes.QuorumThresholdPercentage(QUORUM_THRESHOLD)}
 
-	err := agg.blsAggregationService.InitializeNewTask(batchIndex, taskCreatedBlock, quorumNums, quorumThresholdPercentages, agg.AggregatorConfig.Aggregator.BlsServiceTaskTimeout)
+	err := agg.InitializeNewTask(batchIndex, taskCreatedBlock, quorumNums, quorumThresholdPercentages, agg.AggregatorConfig.Aggregator.BlsServiceTaskTimeout)
 	// FIXME(marian): When this errors, should we retry initializing new task? Logging fatal for now.
 	if err != nil {
 		agg.logger.Fatalf("BLS aggregation service error when initializing new task: %s", err)

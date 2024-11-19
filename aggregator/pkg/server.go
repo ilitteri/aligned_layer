@@ -47,6 +47,13 @@ func (agg *Aggregator) ServeOperators() error {
 //   - 0: Success
 //   - 1: Error
 func (agg *Aggregator) ProcessOperatorSignedTaskResponseV2(signedTaskResponse *types.SignedTaskResponse, reply *uint8) error {
+	agg.AggregatorConfig.BaseConfig.Logger.Info("- Locked operator response: Operator response")
+	agg.operatorResponseMutex.Lock()
+	defer func() {
+		agg.operatorResponseMutex.Unlock()
+		agg.AggregatorConfig.BaseConfig.Logger.Info("- Unlocked operator response: Operator response")
+	}()
+
 	agg.AggregatorConfig.BaseConfig.Logger.Info("New task response",
 		"BatchMerkleRoot", "0x"+hex.EncodeToString(signedTaskResponse.BatchMerkleRoot[:]),
 		"SenderAddress", "0x"+hex.EncodeToString(signedTaskResponse.SenderAddress[:]),
@@ -78,7 +85,7 @@ func (agg *Aggregator) ProcessOperatorSignedTaskResponseV2(signedTaskResponse *t
 
 	// Don't wait infinitely if it can't answer
 	// Create a context with a timeout of 5 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
 	defer cancel() // Ensure the cancel function is called to release resources
 
 	// Create a channel to signal when the task is done
