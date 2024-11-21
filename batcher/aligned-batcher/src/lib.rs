@@ -3,7 +3,9 @@ use config::NonPayingConfig;
 use connection::{send_message, WsMessageSink};
 use dotenvy::dotenv;
 use eth::service_manager::ServiceManager;
-use eth::utils::{calculate_bumped_gas_price, get_batcher_signer, get_gas_price};
+use eth::utils::{
+    calculate_bumped_gas_price, get_batcher_signer, get_current_nonce, get_gas_price,
+};
 use ethers::contract::ContractError;
 use ethers::signers::Signer;
 use retry::batcher_retryables::{
@@ -1429,6 +1431,15 @@ impl Batcher {
         proof_submitters: Vec<Address>,
         fee_params: CreateNewTaskFeeParams,
     ) -> Result<TransactionReceipt, BatcherError> {
+        let batcher_addr = self.batcher_signer.address();
+
+        let current_nonce = get_current_nonce(
+            self.batcher_signer.provider(),
+            self.batcher_signer.provider(),
+            batcher_addr,
+        )
+        .await
+        .unwrap();
         let result = retry_function(
             || {
                 create_new_task_retryable(
@@ -1460,7 +1471,8 @@ impl Batcher {
             }
             Err(RetryError::Permanent(BatcherError::ReceiptNotFoundError)) => {
                 self.metrics.canceled_batches.inc();
-                self.cancel_create_new_task_tx(fee_params.gas_price).await;
+                self.cancel_create_new_task_tx(fee_params.gas_price, current_nonce)
+                    .await;
                 Err(BatcherError::ReceiptNotFoundError)
             }
             Err(RetryError::Permanent(e)) | Err(RetryError::Transient(e)) => Err(e),
@@ -1472,7 +1484,7 @@ impl Batcher {
     /// Bumps the fee if not included in 3 blocks, using `calculate_bumped_gas_price`.
     /// In the first 5 attemps, bumps the fee every 3 blocks. Then exponential backoff takes over.
     /// After 2 hours (attempt 13), retries occur hourly for 1 day (33 retries).
-    pub async fn cancel_create_new_task_tx(&self, old_tx_gas_price: U256) {
+    pub async fn cancel_create_new_task_tx(&self, old_tx_gas_price: U256, current_nonce: U256) {
         info!("Cancelling createNewTask transaction...");
         let iteration = Arc::new(Mutex::new(0));
         let previous_gas_price = Arc::new(Mutex::new(old_tx_gas_price));
@@ -1503,6 +1515,7 @@ impl Batcher {
                     &self.batcher_signer_fallback,
                     bumped_gas_price,
                     self.transaction_wait_timeout,
+                    current_nonce,
                 )
                 .await
             },

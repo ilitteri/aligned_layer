@@ -1,14 +1,12 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use ethers::prelude::*;
 use log::{info, warn};
+use signer::SignerMiddlewareError;
 use tokio::time::timeout;
 
 use crate::{
-    eth::{
-        payment_service::{BatcherPaymentService, CreateNewTaskFeeParams, SignerMiddlewareT},
-        utils::get_current_nonce,
-    },
+    eth::payment_service::{BatcherPaymentService, CreateNewTaskFeeParams, SignerMiddlewareT},
     retry::RetryError,
     types::errors::BatcherError,
 };
@@ -180,16 +178,9 @@ pub async fn cancel_create_new_task_retryable(
     batcher_signer_fallback: &SignerMiddlewareT,
     bumped_gas_price: U256,
     transaction_wait_timeout: u64,
+    current_nonce: U256,
 ) -> Result<TransactionReceipt, RetryError<ProviderError>> {
     let batcher_addr = batcher_signer.address();
-
-    let current_nonce = get_current_nonce(
-        batcher_signer.provider(),
-        batcher_signer_fallback.provider(),
-        batcher_addr,
-    )
-    .await
-    .map_err(RetryError::Transient)?;
 
     let tx = TransactionRequest::new()
         .to(batcher_addr)
@@ -199,6 +190,7 @@ pub async fn cancel_create_new_task_retryable(
 
     let pending_tx = match batcher_signer.send_transaction(tx.clone(), None).await {
         Ok(pending_tx) => pending_tx,
+        Err(SignerMiddlewareError::MiddlewareError(ProviderError::JsonRpcClientError(e))) => {}
         Err(_) => batcher_signer_fallback
             .send_transaction(tx.clone(), None)
             .await
@@ -229,7 +221,9 @@ mod test {
     use crate::{
         config::{ContractDeploymentOutput, ECDSAConfig},
         eth::{
-            self, get_provider, payment_service::BatcherPaymentService, utils::get_batcher_signer,
+            self, get_provider,
+            payment_service::BatcherPaymentService,
+            utils::{get_batcher_signer, get_current_nonce},
         },
     };
     use ethers::{
@@ -237,6 +231,7 @@ mod test {
         types::{Address, U256},
         utils::{Anvil, AnvilInstance},
     };
+    use signer::SignerMiddlewareError;
     use std::str::FromStr;
 
     abigen!(
@@ -414,5 +409,104 @@ mod test {
         let result = get_gas_price_retryable(&eth_rpc_provider, &eth_rpc_provider).await;
 
         assert!(result.is_ok());
+    }
+    // use crate::retry::batcher_retryables::HttpClientError::JsonRpcError;
+    // use crate::retry::batcher_retryables::ProviderError::JsonRpcClientError;
+
+    #[tokio::test]
+    async fn test_send_transaction_twice() {
+        // Get signer
+        let eth_rpc_provider = eth::get_provider(format!("http://localhost:{}", 8545u16))
+            .expect("Failed to get provider");
+
+        let batcher_signer = get_batcher_signer(
+            eth_rpc_provider,
+            ECDSAConfig {
+                private_key_store_path: "../../config-files/anvil.batcher.ecdsa.key.json"
+                    .to_string(),
+                private_key_store_password: "".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        // Get nonce
+
+        let batcher_addr = batcher_signer.address();
+
+        let current_nonce = get_current_nonce(
+            batcher_signer.provider(),
+            batcher_signer.provider(),
+            batcher_addr,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(current_nonce, U256::zero());
+
+        // Build tx
+
+        let current_gas_price =
+            get_gas_price_retryable(batcher_signer.provider(), batcher_signer.provider())
+                .await
+                .unwrap();
+        let tx = TransactionRequest::new()
+            .to(batcher_addr)
+            .value(U256::from(2))
+            .nonce(current_nonce)
+            .gas_price(current_gas_price);
+
+        // Send tx
+
+        let pending_tx = batcher_signer
+            .send_transaction(tx.clone(), None)
+            .await
+            .unwrap();
+        // assert!(pending_tx.await.is_ok());
+
+        // Asserts nonce it is still zero
+        let current_nonce = get_current_nonce(
+            batcher_signer.provider(),
+            batcher_signer.provider(),
+            batcher_addr,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(current_nonce, U256::zero());
+
+        assert!(pending_tx.await.is_ok());
+
+        let current_nonce = get_current_nonce(
+            batcher_signer.provider(),
+            batcher_signer.provider(),
+            batcher_addr,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(current_nonce, U256::one());
+        // Build tx again
+
+        // let tx = TransactionRequest::new()
+        //     .to(batcher_addr)
+        //     .value(U256::zero())
+        //     .nonce(current_nonce)
+        //     .gas_price(current_gas_price);
+
+        // assert_eq!(current_nonce, U256::zero());
+
+        // let result = match batcher_signer.send_transaction(tx.clone(), None).await {
+        //     Ok(_) => true,
+        //     Err(SignerMiddlewareError::MiddlewareError(ProviderError::JsonRpcClientError(e))) => {
+        //         let error = e.as_error_response().unwrap();
+        //         // ver de hacer match Err() && e.as_error() =>
+        //         matches!(*error, JsonRpcError { code: -32000, .. });
+
+        //         false
+        //     }
+        //     Err(_) => false,
+        // };
+        // assert!(result);
     }
 }
