@@ -129,5 +129,5 @@ func (agg *Aggregator) GetTaskIndexRetryable(batchIdentifierHash [32]byte) (uint
 		}
 	}
 
-	return retry.RetryWithData(getTaskIndex_func, retry.MinDelay, retry.RetryFactor, retry.NumRetries, retry.MaxInterval, retry.MaxElapsedTime)
+	return retry.RetryWithData(getTaskIndex_func, retry.EthCallRetryConfig())
 }
