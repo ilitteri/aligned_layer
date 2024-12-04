@@ -51,7 +51,7 @@ use types::batch_queue::{self, BatchQueueEntry, BatchQueueEntryPriority};
 use types::errors::BatcherError;
 
 use crate::config::{ConfigFromYaml, ContractDeploymentOutput};
-use crate::telemetry::sender::TelemetrySender;
+// use crate::telemetry::sender::TelemetrySender;
 
 mod config;
 mod connection;
@@ -62,7 +62,7 @@ pub mod retry;
 pub mod risc_zero;
 pub mod s3;
 pub mod sp1;
-pub mod telemetry;
+// pub mod telemetry;
 pub mod types;
 mod zk_utils;
 
@@ -93,7 +93,7 @@ pub struct Batcher {
     posting_batch: Mutex<bool>,
     disabled_verifiers: Mutex<U256>,
     pub metrics: metrics::BatcherMetrics,
-    pub telemetry: TelemetrySender,
+    // pub telemetry: TelemetrySender,
 }
 
 impl Batcher {
@@ -227,10 +227,10 @@ impl Batcher {
         }
         .expect("Failed to get disabled verifiers");
 
-        let telemetry = TelemetrySender::new(format!(
-            "http://{}",
-            config.batcher.telemetry_ip_port_address
-        ));
+        // let telemetry = TelemetrySender::new(format!(
+        //     "http://{}",
+        //     config.batcher.telemetry_ip_port_address
+        // ));
 
         Self {
             s3_client,
@@ -257,7 +257,7 @@ impl Batcher {
             batch_state: Mutex::new(batch_state),
             disabled_verifiers: Mutex::new(disabled_verifiers),
             metrics,
-            telemetry,
+            // telemetry,
         }
     }
 
@@ -1258,13 +1258,13 @@ impl Batcher {
             .map(VerificationCommitmentBatch::hash_data)
             .collect();
 
-        if let Err(e) = self
-            .telemetry
-            .init_task_trace(&hex::encode(batch_merkle_tree.root))
-            .await
-        {
-            warn!("Failed to initialize task trace on telemetry: {:?}", e);
-        }
+        // if let Err(e) = self
+        //     .telemetry
+        //     .init_task_trace(&hex::encode(batch_merkle_tree.root))
+        //     .await
+        // {
+        //     warn!("Failed to initialize task trace on telemetry: {:?}", e);
+        // }
 
         if let Err(e) = self
             .submit_batch(
@@ -1277,13 +1277,13 @@ impl Batcher {
             .await
         {
             let reason = format!("{:?}", e);
-            if let Err(e) = self
-                .telemetry
-                .task_creation_failed(&hex::encode(batch_merkle_tree.root), &reason)
-                .await
-            {
-                warn!("Failed to send task status to telemetry: {:?}", e);
-            }
+            // if let Err(e) = self
+            //     .telemetry
+            //     .task_creation_failed(&hex::encode(batch_merkle_tree.root), &reason)
+            //     .await
+            // {
+            //     warn!("Failed to send task status to telemetry: {:?}", e);
+            // }
             for entry in finalized_batch.into_iter() {
                 if let Some(ws_sink) = entry.messaging_sink {
                     let merkle_root = hex::encode(batch_merkle_tree.root);
@@ -1401,13 +1401,13 @@ impl Batcher {
         info!("Uploading batch to S3...");
         self.upload_batch_to_s3(batch_bytes, &file_name).await?;
 
-        if let Err(e) = self
-            .telemetry
-            .task_uploaded_to_s3(&batch_merkle_root_hex)
-            .await
-        {
-            warn!("Failed to send task status to telemetry: {:?}", e);
-        };
+        // if let Err(e) = self
+        //     .telemetry
+        //     .task_uploaded_to_s3(&batch_merkle_root_hex)
+        //     .await
+        // {
+        //     warn!("Failed to send task status to telemetry: {:?}", e);
+        // };
         info!("Batch sent to S3 with name: {}", file_name);
 
         info!("Uploading batch to contract");
@@ -1440,17 +1440,17 @@ impl Batcher {
             .gas_price_used_on_latest_batch
             .set(gas_price.as_u64() as i64);
 
-        if let Err(e) = self
-            .telemetry
-            .task_created(
-                &hex::encode(batch_merkle_root),
-                ethers::utils::format_ether(fee_per_proof),
-                num_proofs_in_batch,
-            )
-            .await
-        {
-            warn!("Failed to send task status to telemetry: {:?}", e);
-        };
+        // if let Err(e) = self
+        //     .telemetry
+        //     .task_created(
+        //         &hex::encode(batch_merkle_root),
+        //         ethers::utils::format_ether(fee_per_proof),
+        //         num_proofs_in_batch,
+        //     )
+        //     .await
+        // {
+        //     warn!("Failed to send task status to telemetry: {:?}", e);
+        // };
 
         match self
             .create_new_task(
@@ -1509,13 +1509,13 @@ impl Batcher {
         .await;
         match result {
             Ok(receipt) => {
-                if let Err(e) = self
-                    .telemetry
-                    .task_sent(&hex::encode(batch_merkle_root), receipt.transaction_hash)
-                    .await
-                {
-                    warn!("Failed to send task status to telemetry: {:?}", e);
-                }
+                // if let Err(e) = self
+                //     .telemetry
+                //     .task_sent(&hex::encode(batch_merkle_root), receipt.transaction_hash)
+                //     .await
+                // {
+                //     warn!("Failed to send task status to telemetry: {:?}", e);
+                // }
                 Ok(receipt)
             }
             Err(RetryError::Permanent(BatcherError::ReceiptNotFoundError)) => {
